@@ -44,12 +44,12 @@ jobs:
         workingDirectory: $(System.DefaultWorkingDirectory)
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
         displayName: 'Generate Linux AMD64'
         condition: eq(variables.type, 'linux')
 
       - script: |
-          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
         displayName: 'Generate Linux AMD64 SE Integration'
         condition: eq(variables.type, 'linux')
 
@@ -59,7 +59,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
         displayName: 'Generate Windows AMD64'
         condition: eq(variables.type, 'windows')
         env:
@@ -67,7 +67,7 @@ jobs:
           GOOS: windows
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+          CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
         displayName: 'Generate Windows i386'
         condition: eq(variables.type, 'windows')
         env:
@@ -89,7 +89,7 @@ jobs:
         condition: eq(variables.type, 'linux')
 
       - script: |
-          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+          CGO_ENABLED=0 go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
         displayName: 'Generate MacOS Build with AMD64'
         condition: eq(variables.type, 'mac-os')
 
@@ -165,7 +165,7 @@ jobs:
       - script: |
           mkdir coverage
           echo 'Building executable'
-          go build -cover -o $(build_name)
+          CGO_ENABLED=0 go build -cover -o $(build_name)
           echo 'Running tests'
           $(run_e2e)
           $(save_exit_code)
@@ -281,7 +281,7 @@ jobs:
           directory: 'sddl'
           coverage_name: 'sddl'
       - script: |
-          GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64 
+          CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -cover -o azcopy_linux_amd64 
           go build -o test-validator ./testSuite/
           mkdir test-temp
           mkdir coverage
