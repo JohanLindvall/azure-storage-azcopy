@@ -651,3 +651,56 @@ func createClientOptions(logLevel pipeline.LogLevel, trailingDot *common.Trailin
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
+
+
+func requiresBearerToken(ctx context.Context, blobURL string, cpkOptions common.CpkOptions) (bool, error) {
+	var respErr *azcore.ResponseError
+	// We assume it to be a blob endpoint always
+	credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+	blobClient := common.CreateBlobClient(blobURL, credInfo, nil, policy.ClientOptions{})
+	_, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()})
+
+	if err == nil {
+		return false, nil
+	}
+
+	if !errors.As(err, &respErr) ||
+		(respErr.StatusCode != http.StatusUnauthorized && respErr.StatusCode != http.StatusForbidden) {// *sometimes* the service can return 403s
+		return false, fmt.Errorf("unexpected response for managed disk authorization check: %w", err)
+	}
+
+	challenge := respErr.RawResponse.Header.Get("WWW-Authenticate")
+	return strings.Contains(challenge, common.MDResource), nil
+}
+
+func blobResourceIsPublic(ctx context.Context, blobResourceURL string, cpkOptions common.CpkOptions) bool {
+		// Either blob is public or blob is public. Virtual directories are
+		// public if container itself is public
+		bURLParts, err := blob.ParseURL(blobResourceURL)
+		if err != nil {
+			return false
+		}
+		
+		if bURLParts.ContainerName == "" || strings.Contains(bURLParts.ContainerName, "*") {
+			// Service level searches can't possibly be public.
+			return false
+		}
+
+		bURLParts.BlobName = ""
+		bURLParts.Snapshot = ""
+		bURLParts.VersionID = ""
+		credInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+		containerClient := common.CreateContainerClient(bURLParts.String(), credInfo, nil, policy.ClientOptions{})
+
+		if _, err := containerClient.GetProperties(ctx, nil); err == nil {
+			return true // Container is public.
+		}
+		// TODO: log error here.
+
+		blobClient := common.CreateBlobClient(blobResourceURL, credInfo, nil, policy.ClientOptions{})
+		if _, err := blobClient.GetProperties(ctx, &blob.GetPropertiesOptions{CPKInfo: cpkOptions.GetCPKInfo()}); err == nil {
+			return true
+		}
+
+		return false
+}
