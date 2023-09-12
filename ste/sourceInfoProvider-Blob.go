@@ -73,7 +73,7 @@ func (p *blobSourceInfoProvider) ReadLink() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	blobClient := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+	blobClient := common.CreateBlobClient(source, p.jptm.SourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	ctx := p.jptm.Context()
 
@@ -146,7 +146,7 @@ func (p *blobSourceInfoProvider) AccessControl() (*string, error) {
 	} else {
 		parsedURL.BlobName = "/" // container level perms MUST have a /
 	}
-	fileClient := common.CreateDatalakeFileClient(parsedURL.String(), p.jptm.CredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.ClientOptions())
+	fileClient := common.CreateDatalakeFileClient(parsedURL.String(), p.jptm.SourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.ClientOptions())
 	resp, err := fileClient.GetAccessControl(p.jptm.Context(), nil)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (p *blobSourceInfoProvider) GetFreshFileLastModifiedTime() (time.Time, erro
 		return time.Time{}, err
 	}
 
-	blobClient := common.CreateBlobClient(source, p.jptm.S2SSourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
+	blobClient := common.CreateBlobClient(source, p.jptm.SourceCredentialInfo(), p.jptm.CredentialOpOptions(), p.jptm.S2SSourceClientOptions())
 
 	properties, err := blobClient.GetProperties(p.jptm.Context(), &blob.GetPropertiesOptions{CPKInfo: p.jptm.CpkInfo()})
 	if err != nil {

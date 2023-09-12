@@ -75,7 +75,7 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, _ pip
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 		info := jptm.Info()
 		source := info.Source
-		srcFileClient := common.CreateDatalakeFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		srcFileClient := common.CreateDatalakeFileClient(source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.

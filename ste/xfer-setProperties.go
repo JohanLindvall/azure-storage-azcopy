@@ -55,7 +55,7 @@ func setPropertiesBlob(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	srcBlobClient := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	srcBlobClient := common.CreateBlobClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
@@ -118,7 +118,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 		jptm.ReportTransferDone()
 	}
 
-	srcBlobClient := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	srcBlobClient := common.CreateBlobClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	PropertiesToTransfer := jptm.PropertiesToTransfer()
 	_, metadata, blobTags, _ := jptm.ResourceDstData(nil)
@@ -160,7 +160,7 @@ func setPropertiesBlobFS(jptm IJobPartTransferMgr) {
 
 func setPropertiesFile(jptm IJobPartTransferMgr) {
 	info := jptm.Info()
-	srcFileClient := common.CreateShareFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	srcFileClient := common.CreateShareFileClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.

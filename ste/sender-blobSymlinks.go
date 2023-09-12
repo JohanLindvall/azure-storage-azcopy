@@ -22,7 +22,7 @@ type blobSymlinkSender struct {
 }
 
 func newBlobSymlinkSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	destinationClient := common.CreateBlockBlobClient(destination, jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := sip.Properties()
 	if err != nil {

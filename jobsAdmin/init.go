@@ -178,8 +178,8 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jm.SetInMemoryTransitJobState(
 		ste.InMemoryTransitJobState{
-			CredentialInfo:          order.CredentialInfo,
-			S2SSourceCredentialType: order.S2SSourceCredentialType,
+			DestinationCredentialInfo:          order.DestinationCredentialInfo,
+			SourceCredentialInfo:				order.SourceCredentialInfo,
 		})
 	// Supply no plan MMF because we don't have one, and AddJobPart will create one on its own.
 	jm.AddJobPart(order.PartNum, jppfn, nil, order.SourceRoot.SAS, order.DestinationRoot.SAS, true, nil) // Add this part to the Job and schedule its transfers
@@ -400,7 +400,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		// Get credential info from RPC request, and set in InMemoryTransitJobState.
 		jm.SetInMemoryTransitJobState(
 			ste.InMemoryTransitJobState{
-				CredentialInfo: req.CredentialInfo,
+				DestinationCredentialInfo: req.CredentialInfo,
 			})
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())

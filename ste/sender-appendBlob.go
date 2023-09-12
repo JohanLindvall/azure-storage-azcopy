@@ -69,7 +69,7 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer
 	srcSize := transferInfo.SourceSize
 	numChunks := getNumChunks(srcSize, chunkSize)
 
-	destAppendBlobClient := common.CreateAppendBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	destAppendBlobClient := common.CreateAppendBlobClient(destination, jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {

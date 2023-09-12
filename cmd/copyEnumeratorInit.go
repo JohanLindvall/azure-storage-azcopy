@@ -335,17 +335,12 @@ func (cca *CookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 // This is just for the directory check.
 func (cca *CookedCopyCmdArgs) isDestDirectory(dst common.ResourceString, ctx *context.Context) bool {
 	var err error
-	dstCredInfo := common.CredentialInfo{}
 
 	if ctx == nil {
 		return false
 	}
 
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(*ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
-		return false
-	}
-
-	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &dstCredInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
+	rt, err := InitResourceTraverser(dst, cca.FromTo.To(), ctx, &cca.destinationCredentialInfo, common.ESymlinkHandlingType.Skip(), nil, false, false, false, common.EPermanentDeleteOption.None(), func(common.EntityType) {}, cca.ListOfVersionIDs, false, common.ESyncHashType.None(), cca.preservePermissions, pipeline.LogNone, cca.CpkOptions, nil, cca.StripTopDir, cca.trailingDot, nil)
 
 	if err != nil {
 		return false
@@ -442,10 +437,6 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 	// 3minutes is enough time to list properties of a container, and create new if it does not exist.
 	ctx, cancel := context.WithTimeout(parentCtx, time.Minute*3)
 	defer cancel()
-	if dstCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.To(), cca.Destination.Value, cca.Destination.SAS, false, cca.CpkOptions); err != nil {
-		return err
-	}
-
 	var trailingDot *common.TrailingDotOption
 	var from *common.Location
 	if cca.FromTo.To() == common.ELocation.File() {
@@ -467,7 +458,7 @@ func (cca *CookedCopyCmdArgs) createDstContainer(containerName string, dstWithSA
 			return err
 		}
 
-		bsc := common.CreateBlobServiceClient(accountRoot, dstCredInfo, nil, options)
+		bsc := common.CreateBlobServiceClient(accountRoot, cca.destinationCredentialInfo, nil, options)
 		bcc := bsc.NewContainerClient(containerName)
 
 		_, err = bcc.GetProperties(ctx, nil)

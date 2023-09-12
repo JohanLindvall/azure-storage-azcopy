@@ -3,11 +3,6 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
-	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"mime"
 	"net"
 	"net/http"
@@ -17,6 +12,12 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	azruntime "github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
@@ -55,7 +56,8 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 
-	CredentialInfo() common.CredentialInfo
+	SourceCredentialInfo() common.CredentialInfo
+	DestinationCredentialInfo() common.CredentialInfo
 	ClientOptions() azcore.ClientOptions
 	S2SSourceCredentialInfo() common.CredentialInfo
 	S2SSourceClientOptions() azcore.ClientOptions
@@ -188,7 +190,8 @@ type jobPartMgr struct {
 	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
-	credInfo               common.CredentialInfo
+	destinationCredInfo    common.CredentialInfo
+	sourceCredInfo         common.CredentialInfo
 	clientOptions          azcore.ClientOptions
 	s2sSourceCredInfo      common.CredentialInfo
 	s2sSourceClientOptions azcore.ClientOptions
@@ -449,25 +452,17 @@ func (jpm *jobPartMgr) clientInfo() {
 	jobState := jpm.jobMgr.getInMemoryTransitJobState()
 
 	// Destination credential
-	if jpm.credInfo.CredentialType == common.ECredentialType.Unknown() {
-		jpm.credInfo = jobState.CredentialInfo
+	if jpm.destinationCredInfo.CredentialType == common.ECredentialType.Unknown() {
+		jpm.destinationCredInfo = jobState.DestinationCredentialInfo
 	}
 	fromTo := jpm.planMMF.Plan().FromTo
 
 	// S2S source credential
 	// Default credential type assumed to be SAS
-	s2sSourceCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	// For Blob and BlobFS, there are other options for the source credential
-	if (fromTo.IsS2S() || fromTo.IsDownload()) && (fromTo.From() == common.ELocation.Blob() || fromTo.From() == common.ELocation.BlobFS()) {
-		if fromTo.To().CanForwardOAuthTokens() && jobState.S2SSourceCredentialType.IsAzureOAuth() {
-			if jpm.s2sSourceCredInfo.CredentialType == common.ECredentialType.Unknown() {
-				s2sSourceCredInfo = jobState.CredentialInfo.WithType(jobState.S2SSourceCredentialType)
-			}
-		} else if fromTo.IsDownload() && (jobState.CredentialInfo.CredentialType.IsAzureOAuth() || jobState.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
-			s2sSourceCredInfo = jobState.CredentialInfo
-		}
+	jpm.sourceCredInfo = common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
+	if jobState.SourceCredentialInfo.CredentialType.IsAzureOAuth() {
+		jpm.sourceCredInfo = jobState.SourceCredentialInfo
 	}
-	jpm.s2sSourceCredInfo = s2sSourceCredInfo
 
 	jpm.credOption = &common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
@@ -517,7 +512,8 @@ func (jpm *jobPartMgr) clientInfo() {
 		}
 	}
 	jpm.s2sSourceClientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, nil, logOptions, sourceTrailingDot, nil)
-	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)}
+	jpm.clientOptions = NewClientOptions(retryOptions, telemetryOptions, httpClient, networkStats, logOptions, trailingDot, from)
+}
 
 func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
 	return jpm.slicePool
@@ -750,8 +746,12 @@ func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jpm.jobMgr.ChunkStatusLogger()
 }
 
-func (jpm *jobPartMgr) CredentialInfo() common.CredentialInfo {
-	return jpm.credInfo
+func (jpm *jobPartMgr) SourceCredentialInfo() common.CredentialInfo {
+	return jpm.sourceCredInfo
+}
+
+func (jpm *jobPartMgr) DestinationCredentialInfo() common.CredentialInfo {
+	return jpm.destinationCredInfo
 }
 
 func (jpm *jobPartMgr) S2SSourceCredentialInfo() common.CredentialInfo {

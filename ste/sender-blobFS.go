@@ -83,7 +83,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	// Strip any non-service related things away
 	datalakeURLParts.FileSystemName = ""
 	datalakeURLParts.PathName = ""
-	serviceClient := common.CreateDatalakeServiceClient(datalakeURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	serviceClient := common.CreateDatalakeServiceClient(datalakeURLParts.String(), jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	filesystemClient := serviceClient.NewFileSystemClient(filesystemName)
 
 	var destClient DatalakeClientStub
@@ -95,7 +95,7 @@ func newBlobFSSenderBase(jptm IJobPartTransferMgr, destination string, p pipelin
 	return &blobFSSenderBase{
 		jptm:                jptm,
 		sip:                 sip,
-		fileOrDirClient:        destClient,
+		fileOrDirClient:     destClient,
 		serviceClient: serviceClient,
 		chunkSize:           chunkSize,
 		numChunks:           numChunks,
@@ -244,7 +244,7 @@ func (u *blobFSSenderBase) doEnsureDirExists(directoryClient *directory.Client) 
 }
 
 func (u *blobFSSenderBase) GetBlobClient() *blockblob.Client {
-	return common.CreateBlockBlobClient(u.fileOrDirClient.BlobURL(), u.jptm.CredentialInfo(), u.jptm.CredentialOpOptions(), u.jptm.ClientOptions())
+	return common.CreateBlockBlobClient(u.fileOrDirClient.BlobURL(), u.jptm.DestinationCredentialInfo(), u.jptm.CredentialOpOptions(), u.jptm.ClientOptions())
 }
 
 func (u *blobFSSenderBase) GetSourcePOSIXProperties() (common.UnixStatAdapter, error) {

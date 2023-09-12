@@ -51,7 +51,8 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		SymlinkHandlingType: cca.symlinkHandling,
 		SourceRoot:          cca.source.CloneWithConsolidatedSeparators(),
 		DestinationRoot:     cca.destination.CloneWithConsolidatedSeparators(),
-		CredentialInfo:      cca.credentialInfo,
+		DestinationCredentialInfo: cca.destinationCredentialInfo,
+		SourceCredentialInfo: cca.sourceCredentialInfo,
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
@@ -72,7 +73,6 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		CpkOptions:                     cca.cpkOptions,
 		S2SPreserveBlobTags:            cca.s2sPreserveBlobTags,
 
-		S2SSourceCredentialType: cca.s2sSourceCredentialType,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
@@ -290,7 +290,7 @@ func newSyncDeleteProcessor(cca *cookedSyncCmdArgs, fpo common.FolderPropertyOpt
 
 	clientOptions := createClientOptions(azcopyLogVerbosity.ToPipelineLogLevel(), trailingDot, from)
 
-	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.credentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, cca.destinationCredentialInfo, clientOptions, ctx, cca.fromTo.To(), fpo, cca.forceIfReadOnly).delete,
 		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount, cca.dryrunMode), nil
 }
 

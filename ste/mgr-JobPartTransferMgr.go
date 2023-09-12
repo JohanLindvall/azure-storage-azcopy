@@ -61,14 +61,12 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 
-	CredentialInfo() common.CredentialInfo
+	SourceCredentialInfo() common.CredentialInfo
+	DestinationCredentialInfo() common.CredentialInfo
 	ClientOptions() azcore.ClientOptions
-	S2SSourceCredentialInfo() common.CredentialInfo
 	GetS2SSourceTokenCredential(ctx context.Context) (token *string, err error)
 	S2SSourceClientOptions() azcore.ClientOptions
 	CredentialOpOptions() *common.CredentialOpOptions
-
-	SourceProviderPipeline() pipeline.Pipeline
 
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
@@ -955,8 +953,12 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	return jptm.jobPartMgr.ReportTransferDone(jptm.jobPartPlanTransfer.TransferStatus())
 }
 
-func (jptm *jobPartTransferMgr) CredentialInfo() common.CredentialInfo {
-	return jptm.jobPartMgr.CredentialInfo()
+func (jptm *jobPartTransferMgr) SourceCredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.SourceCredentialInfo()
+}
+
+func (jptm *jobPartTransferMgr) DestinationCredentialInfo() common.CredentialInfo {
+	return jptm.jobPartMgr.DestinationCredentialInfo()
 }
 
 func (jptm *jobPartTransferMgr) ClientOptions() azcore.ClientOptions {
@@ -968,14 +970,14 @@ func (jptm *jobPartTransferMgr) S2SSourceCredentialInfo() common.CredentialInfo 
 }
 
 func (jptm *jobPartTransferMgr) GetS2SSourceTokenCredential(ctx context.Context) (*string, error) {
-	if jptm.S2SSourceCredentialInfo().CredentialType.IsAzureOAuth() {
-		tokenInfo := jptm.S2SSourceCredentialInfo().OAuthTokenInfo
+	if jptm.SourceCredentialInfo().CredentialType.IsAzureOAuth() {
+		tokenInfo := jptm.SourceCredentialInfo().OAuthTokenInfo
 		tc, err := tokenInfo.GetTokenCredential()
 		if err != nil {
 			return nil, err
 		}
 		scope := []string{common.StorageScope}
-		if jptm.S2SSourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
+		if jptm.SourceCredentialInfo().CredentialType == common.ECredentialType.MDOAuthToken() {
 			scope = []string{common.ManagedDiskScope}
 		}
 
@@ -992,10 +994,6 @@ func (jptm *jobPartTransferMgr) S2SSourceClientOptions() azcore.ClientOptions {
 
 func (jptm *jobPartTransferMgr) CredentialOpOptions() *common.CredentialOpOptions {
 	return jptm.jobPartMgr.CredentialOpOptions()
-}
-
-func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
-	return jptm.jobPartMgr.SourceProviderPipeline()
 }
 
 func (jptm *jobPartTransferMgr) SecurityInfoPersistenceManager() *securityInfoPersistenceManager {

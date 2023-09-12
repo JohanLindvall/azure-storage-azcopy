@@ -92,7 +92,7 @@ type rawSyncCmdArgs struct {
 	// Provided key name will be fetched from Azure Key Vault and will be used to encrypt the data
 	cpkScopeInfo string
 	// dry run mode bool
-	dryrun bool
+	dryrun      bool
 	trailingDot string
 }
 
@@ -367,12 +367,12 @@ type cookedSyncCmdArgs struct {
 	// deletion count keeps track of how many extra files from the destination were removed
 	atomicDeletionCount uint32
 
-	source                  common.ResourceString
-	destination             common.ResourceString
-	fromTo                  common.FromTo
-	credentialInfo          common.CredentialInfo
-	s2sSourceCredentialType common.CredentialType
-	isHNSToHNS              bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
+	source                    common.ResourceString
+	destination               common.ResourceString
+	fromTo                    common.FromTo
+	destinationCredentialInfo common.CredentialInfo
+	sourceCredentialInfo      common.CredentialInfo
+	isHNSToHNS                bool // Because DFS sources and destinations are obscured, this is necessary for folder property transfers on ADLS Gen 2.
 
 	// filters
 	recursive             bool
@@ -430,7 +430,7 @@ type cookedSyncCmdArgs struct {
 
 	mirrorMode bool
 
-	dryrunMode bool
+	dryrunMode  bool
 	trailingDot common.TrailingDotOption
 }
 
@@ -669,36 +669,34 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	// Verifies credential type and initializes credential info.
 	// Note that this is for the destination.
-	cca.credentialInfo, _, err = GetCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination.Value, cca.destination.SAS, false, cca.cpkOptions)
-
+	cca.destinationCredentialInfo.CredentialType, err = getDestinationCredential(ctx, cca.fromTo.To(), cca.destination, cca.cpkOptions)
 	if err != nil {
 		return err
 	}
-
-	srcCredInfo, _, err := GetCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source.Value, cca.source.SAS, true, cca.cpkOptions)
-
-	if err != nil {
-		return err
-	}
-
-	// Download is the only time our primary credential type will be based on source
-	if cca.fromTo.IsDownload() {
-		cca.credentialInfo = srcCredInfo
-	} else if cca.fromTo.IsS2S() {
-		cca.s2sSourceCredentialType = srcCredInfo.CredentialType // Assign the source credential type in S2S
-	}
-
-	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
-	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() || srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.destinationCredentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			cca.destinationCredentialInfo.OAuthTokenInfo = *tokenInfo
 		}
 	}
+
+	cca.sourceCredentialInfo.CredentialType, err = getSrcCredential(ctx, cca.fromTo.From(), cca.source, cca.cpkOptions)
+	if err != nil {
+		return err
+	}
+	if cca.destinationCredentialInfo.CredentialType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			cca.sourceCredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
 
 	enumerator, err := cca.initEnumerator(ctx)
 	if err != nil {
@@ -803,8 +801,8 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.cpkInfo, "cpk-by-value", false, "Client provided key by name let clients making requests against Azure Blob storage an option to provide an encryption key on a per-request basis. Provided key and its hash will be fetched from environment variables")
 	syncCmd.PersistentFlags().BoolVar(&raw.mirrorMode, "mirror-mode", false, "Disable last-modified-time based comparison and overwrites the conflicting files and blobs at the destination if this flag is set to true. Default is false")
 	syncCmd.PersistentFlags().BoolVar(&raw.dryrun, "dry-run", false, "Prints the path of files that would be copied or removed by the sync command. This flag does not copy or remove the actual files.")
-	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. " +
-		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation." +
+	syncCmd.PersistentFlags().StringVar(&raw.trailingDot, "trailing-dot", "", "'Enable' by default to treat file share related operations in a safe manner. Available options: Enable, Disable. "+
+		"Choose 'Disable' to go back to legacy (potentially unsafe) treatment of trailing dot files where the file service will trim any trailing dots in paths. This can result in potential data corruption if the transfer contains two paths that differ only by a trailing dot (ex: mypath and mypath.). If this flag is set to 'Disable' and AzCopy encounters a trailing dot file, it will warn customers in the scanning log but will not attempt to abort the operation."+
 		"If the destination does not support trailing dot files (Windows or Blob Storage), AzCopy will fail if the trailing dot file is the root of the transfer and skip any trailing dot paths encountered during enumeration.")
 
 	syncCmd.PersistentFlags().StringVar(&raw.compareHash, "compare-hash", "None", "Inform sync to rely on hashes as an alternative to LMT. Missing hashes at a remote source will throw an error. (None, MD5) Default: None")

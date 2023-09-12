@@ -45,9 +45,8 @@ type PartNumber = common.PartNumber
 // i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
 // This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
-	CredentialInfo common.CredentialInfo
-	// S2SSourceCredentialType can override the CredentialInfo.CredentialType when being used for the source (e.g. Source Info Provider and when using GetS2SSourceBlobTokenCredential)
-	S2SSourceCredentialType common.CredentialType
+	DestinationCredentialInfo common.CredentialInfo
+	SourceCredentialInfo      common.CredentialInfo
 }
 
 type IJobMgr interface {
@@ -335,7 +334,7 @@ type jobMgr struct {
 	fileCountLimiter    common.CacheLimiter
 	jstm                *jobStatusManager
 
-	isDaemon        bool /* is it running as service */
+	isDaemon bool /* is it running as service */
 }
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -464,22 +463,17 @@ func (jm *jobMgr) AddJobOrder(order common.CopyJobPartOrderRequest) IJobPartMgr 
 	jppfn := JobPartPlanFileName(fmt.Sprintf(JobPartPlanFileNameFormat, order.JobID.String(), 0, DataSchemaVersion))
 	jppfn.Create(order) // Convert the order to a plan file
 
-	s2sSourceCredInfo := order.CredentialInfo.WithType(order.S2SSourceCredentialType)
-	if order.S2SSourceCredentialType == common.ECredentialType.OAuthToken() {
-		s2sSourceCredInfo.OAuthTokenInfo.TokenCredential = s2sSourceCredInfo.S2SSourceTokenCredential
-	}
-
 	jpm := &jobPartMgr{
-		jobMgr:            jm,
-		filename:          jppfn,
-		sourceSAS:         order.SourceRoot.SAS,
-		destinationSAS:    order.DestinationRoot.SAS,
-		pacer:             jm.pacer,
-		slicePool:         jm.slicePool,
-		cacheLimiter:      jm.cacheLimiter,
-		fileCountLimiter:  jm.fileCountLimiter,
-		credInfo:          order.CredentialInfo,
-		s2sSourceCredInfo: s2sSourceCredInfo,
+		jobMgr:              jm,
+		filename:            jppfn,
+		sourceSAS:           order.SourceRoot.SAS,
+		destinationSAS:      order.DestinationRoot.SAS,
+		pacer:               jm.pacer,
+		slicePool:           jm.slicePool,
+		cacheLimiter:        jm.cacheLimiter,
+		fileCountLimiter:    jm.fileCountLimiter,
+		sourceCredInfo:      order.SourceCredentialInfo,
+		destinationCredInfo: order.DestinationCredentialInfo,
 	}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(order.PartNum, jpm)
@@ -702,7 +696,7 @@ func (jm *jobMgr) SetInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }
 
-func (jm *jobMgr) Context() context.Context                { return jm.ctx }
+func (jm *jobMgr) Context() context.Context { return jm.ctx }
 func (jm *jobMgr) Cancel() {
 	jm.cancel()
 	jm.jobPartProgress <- jobPartProgressInfo{} // in case we're waiting on another job part; we can just shoot in a zeroed out version & achieve a cancel immediately

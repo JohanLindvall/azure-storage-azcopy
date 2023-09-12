@@ -65,14 +65,14 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 	// Deleting a filesystem
 	if datalakeURLParts.PathName == "" {
-		fsClient := common.CreateFilesystemClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		fsClient := common.CreateFilesystemClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		_, err := fsClient.Delete(ctx, nil)
 		transferDone(err)
 		return
 	}
 
 	// Check if the source is a file or directory
-	directoryClient := common.CreateDatalakeDirectoryClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	directoryClient := common.CreateDatalakeDirectoryClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 	var respFromCtx *http.Response
 	ctxWithResp := runtime.WithCaptureResponse(ctx, &respFromCtx)
 	_, err = directoryClient.GetProperties(ctxWithResp, nil)
@@ -83,7 +83,7 @@ func doDeleteHNSResource(jptm IJobPartTransferMgr) {
 
 	resourceType := respFromCtx.Header.Get("x-ms-resource-type")
 	if strings.EqualFold(resourceType, "file") {
-		fileClient := common.CreateDatalakeFileClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		fileClient := common.CreateDatalakeFileClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 		_, err := fileClient.Delete(ctx, nil)
 		transferDone(err)

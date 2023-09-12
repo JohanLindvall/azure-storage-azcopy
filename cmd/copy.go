@@ -1144,6 +1144,8 @@ type CookedCopyCmdArgs struct {
 
 	// extracted from the input
 	credentialInfo common.CredentialInfo
+	destinationCredentialInfo common.CredentialInfo
+	sourceCredentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -1276,7 +1278,22 @@ func (cca *CookedCopyCmdArgs) processRedirectionDownload(blobResource common.Res
 	// The isPublic flag is useful in S2S transfers but doesn't much matter for download. Fortunately, no S2S happens here.
 	// This means that if there's auth, there's auth. We're happy and can move on.
 	// GetCredentialInfoForLocation also populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, true, cca.CpkOptions)
+	var credInfo common.CredentialInfo
+	credInfo.CredentialType, err = getSrcCredential(ctx, common.ELocation.Blob(), blobResource, cca.CpkOptions)
+	if err != nil {
+		return err
+	}
+	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
+	// the info will be transferred to STE.
+	if credInfo.CredentialType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			cca.destinationCredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on source blob URL: %s", err.Error())
@@ -1323,7 +1340,19 @@ func (cca *CookedCopyCmdArgs) processRedirectionUpload(blobResource common.Resou
 	}
 
 	// GetCredentialInfoForLocation populates oauth token fields... so, it's very easy.
-	credInfo, _, err := GetCredentialInfoForLocation(ctx, common.ELocation.Blob(), blobResource.Value, blobResource.SAS, false, cca.CpkOptions)
+	credType, err := getDestinationCredential(ctx, common.ELocation.Blob(), blobResource, cca.CpkOptions)
+	credInfo := common.CredentialInfo{CredentialType: credType}
+	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
+	// the info will be transferred to STE.
+	if credType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			credInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
 
 	if err != nil {
 		return fmt.Errorf("fatal: cannot find auth on destination blob URL: %s", err.Error())
@@ -1378,167 +1407,6 @@ var errAzureFilesSupportsOnlySAS = common.NewAzError(common.EAzError.LoginCredMi
 var errLoginCredsMissing = common.NewAzError(common.EAzError.LoginCredMissing(), "No SAS token or OAuth token is present and the resource is not public")
 var errLoginMDOauthMissing = common.NewAzError(common.EAzError.LoginCredMissing(), "Managed disk requires additional oauth token to authenticate.")
 
-func (cca *CookedCopyCmdArgs) getDestinationCredential(ctx context.Context) (common.CredentialType, error) {
-	switch cca.FromTo.To() {
-	case common.ELocation.Local(), common.ELocation.Pipe():
-		return common.ECredentialType.NoAuth(), nil
-	case common.ELocation.S3(), common.ELocation.GCP():
-		return common.ECredentialType.Unknown(), common.EAzError.UnsupportedDestination()
-	}
-
-	mdAccount := false
-	if cca.FromTo.To() == common.ELocation.Blob() {
-		uri, _ := url.Parse(cca.Destination.Value)
-		if strings.HasPrefix(uri.Host, "md-") {
-			mdAccount = true
-		}
-	}
-
-	// The destinations can be Blob, BlobFS and Files. If we have
-	// SAS, we'll always use it.
-	if cca.Destination.SAS != "" && !mdAccount {
-		return common.ECredentialType.Anonymous(), nil
-	}
-
-	// Files supports only SAS
-	if cca.FromTo.To() == common.ELocation.File() {
-		return common.ECredentialType.Unknown(), errAzureFilesSupportsOnlySAS
-	}
-
-	// We've either BLob or BlobFS here
-	if mdAccount {
-		blobURL, err := cca.Destination.String()
-		if err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-
-		if requiresToken, err := requiresBearerToken(ctx, blobURL, cca.CpkOptions); err != nil {
-			return common.ECredentialType.Unknown(), err
-		} else if requiresToken && oAuthTokenExists() {
-			return common.ECredentialType.MDOAuthToken(), nil
-		} else if requiresToken {
-			return common.ECredentialType.Unknown(), errLoginMDOauthMissing
-		}
-
-		return common.ECredentialType.Anonymous(), nil
-	}
-
-	if oAuthTokenExists() {
-		return common.ECredentialType.OAuthToken(), nil
-	}
-
-	return common.ECredentialType.Unknown(), errLoginCredsMissing 
-}
-
-
-// get source credential - if there is a token it will be used to get passed along our pipeline
-func (cca *CookedCopyCmdArgs) getSrcCredential(ctx context.Context, jpo *common.CopyJobPartOrderRequest) (common.CredentialType, error) {
-	switch cca.FromTo.From() {
-	case common.ELocation.Local(), common.ELocation.Pipe():
-		return common.ECredentialType.NoAuth(), nil
-	case common.ELocation.S3():
-		accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
-		secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
-		if accessKeyID == "" || secretAccessKey == "" {
-			return common.ECredentialType.S3PublicBucket(), nil
-		}
-		return common.ECredentialType.S3AccessKey(), nil
-	case common.ELocation.GCP():
-		googleAppCredentials := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.GoogleAppCredentials())
-		if googleAppCredentials == "" {
-			return common.ECredentialType.Unknown(), errors.New("GOOGLE_APPLICATION_CREDENTIALS environment variable must be set before using GCP transfer feature")
-		}
-		return common.ECredentialType.GoogleAppCredentials(), nil
-	default:
-	}
-
-	// Only Blob location can be mdAccount or be public.
-	if cca.FromTo.From() == common.ELocation.Blob() {
-		uri, _ := url.Parse(cca.Destination.Value)
-		mdAccount := strings.HasPrefix(uri.Host, "md-")
-
-		blobURL, err := cca.Destination.String()
-		if err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-
-		// Md accounts are not public
-		if !mdAccount && blobResourceIsPublic(ctx, blobURL, cca.CpkOptions) {
-			return common.ECredentialType.Anonymous(), nil
-		}
-
-		if requiresToken, err := requiresBearerToken(ctx, blobURL, cca.CpkOptions); err != nil {
-			return common.ECredentialType.Unknown(), err
-		} else if requiresToken && oAuthTokenExists() {
-			return common.ECredentialType.MDOAuthToken(), nil
-		} else if requiresToken {
-			return common.ECredentialType.Unknown(), errLoginMDOauthMissing
-		}
-	}
-
-	// We are left with Blob, blobFS and Files
-
-	// If we have SAS, we'll always use it.
-	if cca.Source.SAS != "" {
-		return common.ECredentialType.Anonymous(), nil
-	}
-
-	if cca.FromTo.From() == common.ELocation.File() {
-		return common.ECredentialType.Unknown(), errAzureFilesSupportsOnlySAS
-	}
-
-	if oAuthTokenExists() {
-		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant "+
-		          "& the user/spn/msi has appropriate permissions on both, the source SAS token is not"+
-				  " required and OAuth can be used round-trip.")
-		return common.ECredentialType.OAuthToken(), nil
-	}
-
-	return common.ECredentialType.Unknown(), errLoginCredsMissing
-}
-
-
-	srcCredInfo, isPublic, err := GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions)
-	if err != nil {
-		return srcCredInfo, err
-		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.FromTo.IsS2S() &&
-		((srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() && !cca.FromTo.To().CanForwardOAuthTokens()) || // Blob can forward OAuth tokens; BlobFS inherits this.
-			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.Source.SAS == "")) {
-		return srcCredInfo, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource. Blob and BlobFS additionally support OAuth on both source and destination")
-	} else if cca.FromTo.IsS2S() && (srcCredInfo.CredentialType == common.ECredentialType.SharedKey() || jpo.CredentialInfo.CredentialType == common.ECredentialType.SharedKey()) {
-		return srcCredInfo, errors.New("shared key auth is not supported for S2S operations")
-	}
-
-	if cca.Source.SAS != "" && cca.FromTo.IsS2S() && jpo.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		glcm.Info("Authentication: If the source and destination accounts are in the same AAD tenant & the user/spn/msi has appropriate permissions on both, the source SAS token is not required and OAuth can be used round-trip.")
-	}
-
-	/*
-	if cca.FromTo.IsS2S() {
-		jpo.S2SSourceCredentialType = srcCredInfo.CredentialType
-
-		if jpo.S2SSourceCredentialType.IsAzureOAuth() {
-			uotm := GetUserOAuthTokenManagerInstance()
-			// get token from env var or cache
-			if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-				return srcCredInfo, err
-			} else {
-				cca.credentialInfo.OAuthTokenInfo = *tokenInfo
-				jpo.CredentialInfo.OAuthTokenInfo = *tokenInfo
-			}
-			jpo.CredentialInfo.S2SSourceTokenCredential, err = common.GetSourceBlobCredential(srcCredInfo, common.CredentialOpOptions{LogError: glcm.Info})
-			if err != nil {
-				return srcCredInfo, err
-			}
-			// if the source is not local then store the credential token if it was OAuth to avoid constant refreshing
-			cca.credentialInfo.S2SSourceTokenCredential = jpo.CredentialInfo.S2SSourceTokenCredential
-		}
-	}
-	return srcCredInfo, nil
-}
-*/
-
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
@@ -1556,32 +1424,37 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return fmt.Errorf("failed to resolve destination: %w", err)
 	}
 
-	// Note: credential info here is only used by remove at the moment.
-	// TODO: Get the entirety of remove into the new copyEnumeratorInit script so we can remove this
-	//       and stop having two places in copy that we get credential info
-	// verifies credential type and initializes credential info.
-	// Note: Currently, only one credential type is necessary for source and destination.
-	// For upload&download, only one side need credential.
-	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
-	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         cca.FromTo,
-		source:         cca.Source.Value,
-		destination:    cca.Destination.Value,
-		sourceSAS:      cca.Source.SAS,
-		destinationSAS: cca.Destination.SAS,
-	}, cca.CpkOptions); err != nil {
+	ct, err := getDestinationCredential(ctx, cca.FromTo.To(), cca.Destination, cca.CpkOptions)
+	if err != nil {
 		return err
 	}
+	cca.destinationCredentialInfo.CredentialType = ct
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if cca.credentialInfo.CredentialType.IsAzureOAuth() {
+	if cca.destinationCredentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
-			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
+			cca.destinationCredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
+	ct, err = getSrcCredential(ctx, cca.FromTo.From(), cca.Source, cca.CpkOptions)
+	if err != nil {
+		return err
+	}
+	cca.sourceCredentialInfo.CredentialType = ct
+
+	if cca.sourceCredentialInfo.CredentialType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			cca.sourceCredentialInfo.OAuthTokenInfo = *tokenInfo
 		}
 	}
 
@@ -1617,7 +1490,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			BlobTagsString: cca.blobTags.ToString(),
 		},
 		CommandString:  cca.commandString,
-		CredentialInfo: cca.credentialInfo,
+		DestinationCredentialInfo: cca.destinationCredentialInfo,
+		SourceCredentialInfo: cca.sourceCredentialInfo,
 		FileAttributes: common.FileTransferAttributes{
 			TrailingDot: cca.trailingDot,
 		},
@@ -1647,13 +1521,8 @@ func (cca *CookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case cca.FromTo.IsUpload(), cca.FromTo.IsDownload(), cca.FromTo.IsS2S():
 		// Execute a standard copy command
 		var e *CopyEnumerator
-		var srcCredInfo common.CredentialInfo
-		srcCredInfo, err = cca.getSrcCredential(ctx, &jobPartOrder)
-		if err != nil {
-			return fmt.Errorf("failed to discern source credential type: %w", err)
-		}
 
-		e, err = cca.initEnumerator(jobPartOrder, srcCredInfo, ctx)
+		e, err = cca.initEnumerator(jobPartOrder, cca.credentialInfo, ctx)
 		if err != nil {
 			return fmt.Errorf("failed to initialize enumerator: %w", err)
 		}

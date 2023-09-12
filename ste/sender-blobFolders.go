@@ -26,7 +26,7 @@ type blobFolderSender struct {
 }
 
 func newBlobFolderSender(jptm IJobPartTransferMgr, destination string, sip ISourceInfoProvider) (sender, error) {
-	destinationClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	destinationClient := common.CreateBlockBlobClient(destination, jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 
 	props, err := sip.Properties()
@@ -60,7 +60,7 @@ func (b *blobFolderSender) setDatalakeACLs() {
 	}
 	blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
 	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-	fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), b.jptm.CredentialInfo(), b.jptm.CredentialOpOptions(), b.jptm.ClientOptions())
+	fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), b.jptm.DestinationCredentialInfo(), b.jptm.CredentialOpOptions(), b.jptm.ClientOptions())
 
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()
@@ -120,7 +120,7 @@ func (b *blobFolderSender) SetContainerACL() error {
 	}
 	blobURLParts.ContainerName += "/" // container level perms MUST have a /
 	blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
-	rootClient := common.CreateFilesystemClient(blobURLParts.String(), b.jptm.CredentialInfo(), b.jptm.CredentialOpOptions(), b.jptm.ClientOptions()).NewDirectoryClient("")
+	rootClient := common.CreateFilesystemClient(blobURLParts.String(), b.jptm.DestinationCredentialInfo(), b.jptm.CredentialOpOptions(), b.jptm.ClientOptions()).NewDirectoryClient("")
 
 	// We know for a fact our source is a "blob".
 	acl, err := b.sip.(*blobSourceInfoProvider).AccessControl()

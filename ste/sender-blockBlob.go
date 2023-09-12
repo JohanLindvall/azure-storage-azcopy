@@ -131,7 +131,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 		return nil, err
 	}
 
-	destBlockBlobClient := common.CreateBlockBlobClient(destination, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	destBlockBlobClient := common.CreateBlockBlobClient(destination, jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	props, err := srcInfoProvider.Properties()
 	if err != nil {
@@ -261,7 +261,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		blobURLParts.BlobName = strings.TrimSuffix(blobURLParts.BlobName, "/") // BlobFS does not like when we target a folder with the /
 		blobURLParts.Host = strings.ReplaceAll(blobURLParts.Host, ".blob", ".dfs")
 
-		fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		fileClient := common.CreateDatalakeFileClient(blobURLParts.String(), jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		// We know for a fact our source is a "blob".
 		acl, err := s.sip.(*blobSourceInfoProvider).AccessControl()
 		if err != nil {

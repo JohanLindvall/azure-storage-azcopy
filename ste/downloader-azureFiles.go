@@ -118,7 +118,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 		source := jptm.Info().Source
-		fileClient := common.CreateShareFileClient(source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+		fileClient := common.CreateShareFileClient(source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.

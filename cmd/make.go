@@ -72,7 +72,7 @@ type cookedMakeCmdArgs struct {
 
 func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
+	credInfo := common.CredentialInfo{}
 	resourceStringParts, err := SplitResourceString(cookedArgs.resourceURL.String(), cookedArgs.resourceLocation)
 	if err != nil {
 		return err
@@ -82,9 +82,19 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		return fmt.Errorf("failed to resolve target: %w", err)
 	}
 
-	credentialInfo, _, err := GetCredentialInfoForLocation(ctx, cookedArgs.resourceLocation, resourceStringParts.Value, resourceStringParts.SAS, false, common.CpkOptions{})
+	credInfo.CredentialType, err = getDestinationCredential(ctx, cookedArgs.resourceLocation, resourceStringParts, common.CpkOptions{})
 	if err != nil {
 		return err
+	}
+
+	if credInfo.CredentialType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			credInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	// Note : trailing dot is only applicable to file operations anyway, so setting this to false
@@ -92,7 +102,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
-		filesystemClient := common.CreateFilesystemClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		filesystemClient := common.CreateFilesystemClient(cookedArgs.resourceURL.String(), credInfo, nil, options)
 		if _, err = filesystemClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
 			if datalakeerror.HasCode(err, datalakeerror.FileSystemAlreadyExists) {
@@ -105,7 +115,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		}
 	case common.ELocation.Blob():
 		// TODO : Ensure it is a container URL here and fail early?
-		containerClient := common.CreateContainerClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		containerClient := common.CreateContainerClient(cookedArgs.resourceURL.String(), credInfo, nil, options)
 		if _, err = containerClient.Create(ctx, nil); err != nil {
 			// print a nicer error message if container already exists
 			if bloberror.HasCode(err, bloberror.ContainerAlreadyExists) {
@@ -117,7 +127,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 			return err
 		}
 	case common.ELocation.File():
-		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credentialInfo, nil, options)
+		shareClient := common.CreateShareClient(cookedArgs.resourceURL.String(), credInfo, nil, options)
 		quota := &cookedArgs.quota
 		if quota != nil && *quota == 0 {
 			quota = nil

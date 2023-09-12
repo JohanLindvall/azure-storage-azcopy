@@ -35,7 +35,7 @@ func doDeleteBlob(jptm IJobPartTransferMgr) {
 
 	info := jptm.Info()
 	// Get the source blob url of blob to delete
-	blobClient := common.CreateBlobClient(info.Source, jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	blobClient := common.CreateBlobClient(info.Source, jptm.SourceCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	// Internal function which checks the transfer status and logs the msg respectively.
 	// Sets the transfer status and Report Transfer as Done.

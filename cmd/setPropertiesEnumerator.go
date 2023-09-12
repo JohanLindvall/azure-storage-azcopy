@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/v10/common"
 	"github.com/Azure/azure-storage-azcopy/v10/jobsAdmin"
@@ -39,11 +38,17 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 
 	var srcCredInfo common.CredentialInfo
 
-	if srcCredInfo, _, err = GetCredentialInfoForLocation(ctx, cca.FromTo.From(), cca.Source.Value, cca.Source.SAS, true, cca.CpkOptions); err != nil {
+	if srcCredInfo.CredentialType, err = getSrcCredential(ctx, cca.FromTo.From(), cca.Source, cca.CpkOptions); err != nil {
 		return nil, err
 	}
-	if cca.FromTo == common.EFromTo.FileNone() && (srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && cca.Source.SAS == "") {
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the input for set-properties on File Storage")
+	if srcCredInfo.CredentialType.IsAzureOAuth() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return nil, err
+		} else {
+			srcCredInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	// Include-path is handled by ListOfFilesChannel.
@@ -99,4 +104,8 @@ func setPropertiesEnumerator(cca *CookedCopyCmdArgs) (enumerator *CopyEnumerator
 		return nil
 	}
 	return NewCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
+}
+
+func getSourceCredentialInfo(ctx context.Context, location common.Location, resourceString common.ResourceString, cpkOptions common.CpkOptions) {
+	panic("unimplemented")
 }

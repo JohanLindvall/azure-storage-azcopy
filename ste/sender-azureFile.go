@@ -110,7 +110,7 @@ func newAzureFileSenderBase(jptm IJobPartTransferMgr, destination string, pacer 
 	fileURLParts.ShareName = ""
 	fileURLParts.ShareSnapshot = ""
 	fileURLParts.DirectoryOrFilePath = ""
-	serviceClient := common.CreateFileServiceClient(fileURLParts.String(), jptm.CredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
+	serviceClient := common.CreateFileServiceClient(fileURLParts.String(), jptm.DestinationCredentialInfo(), jptm.CredentialOpOptions(), jptm.ClientOptions())
 
 	shareClient := serviceClient.NewShareClient(shareName)
 	if shareSnapshot != "" {

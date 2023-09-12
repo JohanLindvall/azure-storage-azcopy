@@ -305,13 +305,12 @@ func (rca resumeCmdArgs) process() error {
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
-	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
-		fromTo:         getJobFromToResponse.FromTo,
-		source:         getJobFromToResponse.Source,
-		destination:    getJobFromToResponse.Destination,
-		sourceSAS:      rca.SourceSAS,
-		destinationSAS: rca.DestinationSAS,
-	}, common.CpkOptions{}); err != nil {
+	credentialInfo.CredentialType, err = getDestinationCredential(
+		ctx,
+		getJobFromToResponse.FromTo.To(),
+		common.ResourceString{Value: getJobFromToResponse.Destination, SAS: rca.DestinationSAS},
+		common.CpkOptions{})
+	if err != nil {
 		return err
 	} else if credentialInfo.CredentialType.IsAzureOAuth() {
 		uotm := GetUserOAuthTokenManagerInstance()
