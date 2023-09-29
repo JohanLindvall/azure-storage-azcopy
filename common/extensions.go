@@ -137,7 +137,7 @@ func GenerateFullPath(rootPath, childPath string) string {
 	rootSeparator := DeterminePathSeparator(rootPath)
 	rootPath = strings.TrimSuffix(rootPath, rootSeparator)
 	childPath = strings.ReplaceAll(childPath, DeterminePathSeparator(childPath), rootSeparator)
-	childPath = strings.TrimPrefix(childPath, rootSeparator)
+	//childPath = strings.TrimPrefix(childPath, rootSeparator)
 
 	if rootPath == "" {
 		return childPath
